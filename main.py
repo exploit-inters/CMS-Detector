@@ -3,33 +3,22 @@
 import asyncio
 import contextlib
 from json import loads
-from ssl import SSLError
 from urllib.parse import urlsplit
+from contextlib import redirect_stderr
 
 from aiofiles import open as afile
 from aiohttp import ClientSession, ClientTimeout
 
 
-@contextlib.contextmanager
-def silent_out():
-    loop = asyncio.get_event_loop()
-    old_handler = loop.get_exception_handler()
-    old_handler_fn = old_handler
+class Devnull(object):
+    def write(self, *_): pass
 
-    def ignore_exc(_loop, ctx):
-        exc = ctx.get('exception')
 
-        if isinstance(exc, SSLError):
-            return
-
-        old_handler_fn(loop, ctx)
-
-    loop.set_exception_handler(ignore_exc)
-
-    try:
-        yield
-    finally:
-        loop.set_exception_handler(old_handler)
+async def save(where, what):
+    async with afile(f'{where}.txt', 'a',
+                     encoding="utf-8",
+                     errors="ignore") as f:
+        await f.write(f'{what}\n')
 
 
 async def joomla(url):
@@ -129,13 +118,6 @@ async def drupal(url):
         return [False, '']
 
 
-async def save(where, what):
-    async with afile(f'{where}.txt', 'a',
-                     encoding="utf-8",
-                     errors="ignore") as f:
-        await f.write(f'{what}\n')
-
-
 async def alive(url):
     try:
         async with ClientSession(timeout=timeout) as s:
@@ -151,16 +133,21 @@ async def alive(url):
 async def purgatory(url):
     url = url if 'http' in url else 'http://' + url
 
-    with silent_out():
+    try:
         if await alive(url) is False:
             return
+    except:
+        return
 
-        for item in cms:
+    for item in cms:
+        try:
             temp = await item[0](url)
 
             if temp[0]:
                 await save(item[1], temp[1])
                 break
+        except:
+            pass
 
 
 async def main():
@@ -202,4 +189,5 @@ if __name__ == "__main__":
     cms = [_dle, _bitrix, _joomla, _drupal, _magento, _wordpress]
     timeout = ClientTimeout(total=settings['timeout'])
 
-    asyncio.run(main())
+    with redirect_stderr(Devnull()):
+        asyncio.run(main())
