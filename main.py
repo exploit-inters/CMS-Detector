@@ -1,17 +1,9 @@
-# -*- coding: utf-8 -*-
-
 import asyncio
-import contextlib
-from json import loads
+from json import load
 from urllib.parse import urlsplit
-from contextlib import redirect_stderr
 
 from aiofiles import open as afile
 from aiohttp import ClientSession, ClientTimeout
-
-
-class Devnull(object):
-    def write(self, *_): pass
 
 
 async def save(where, what):
@@ -133,10 +125,7 @@ async def alive(url):
 async def purgatory(url):
     url = url if 'http' in url else 'http://' + url
 
-    try:
-        if await alive(url) is False:
-            return
-    except:
+    if not await alive(url):
         return
 
     for item in cms:
@@ -156,14 +145,14 @@ async def main():
 
     async with afile('links', errors='ignore', encoding='utf-8') as links:
         async for link in links:
-            count += 1
-            task = asyncio.create_task(
+            task = asyncio.ensure_future(
                 purgatory(
-                    link.strip('\n')
+                    link.strip()
                 )
             )
             tasks.append(task)
 
+            count += 1
             print(f'Passed: {count}', end='\r')
 
             if len(tasks) >= settings['threads']:
@@ -176,8 +165,7 @@ async def main():
 
 
 if __name__ == "__main__":
-
-    settings = loads(open('settings.json', 'r').read())
+    settings = load(open('settings.json', 'r'))
 
     _dle = [dle, 'dle']
     _bitrix = [bitrix, 'bitrix']
@@ -189,5 +177,6 @@ if __name__ == "__main__":
     cms = [_dle, _bitrix, _joomla, _drupal, _magento, _wordpress]
     timeout = ClientTimeout(total=settings['timeout'])
 
-    with redirect_stderr(Devnull()):
-        asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    loop.close()
